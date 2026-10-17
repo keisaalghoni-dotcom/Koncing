@@ -2,26 +2,19 @@ import React from "react";
 import {Composition} from "remotion";
 import {Short, ShortProps, getTotalFrames} from "./Short";
 
+// ====== GANTI DATA DI SINI ======
 const defaultProps: ShortProps = {
-  hook: "Kamu pasti belum tahu ini",
-  facts: [
-    {
-      emoji: "🐙",
-      title: "Gurita punya tiga jantung",
-      detail: "Dua memompa darah ke insang, satu ke seluruh tubuh.",
-    },
-    {
-      emoji: "🍯",
-      title: "Madu tidak pernah basi",
-      detail: "Madu berusia ribuan tahun di makam Mesir masih aman dimakan.",
-    },
-    {
-      emoji: "⚡",
-      title: "Petir lebih panas dari Matahari",
-      detail: "Suhunya bisa sekitar lima kali permukaan Matahari.",
-    },
+  hook: "Siapa hewan paling tukang tidur?",
+  unit: "jam",
+  max: 24,
+  items: [
+    {label: "Koala", emoji: "🐨", value: 20, color: "#FF6B4A"},
+    {label: "Kucing", emoji: "🐱", value: 14, color: "#FFC93C"},
+    {label: "Manusia", emoji: "🧑", value: 8, color: "#3DDBD9"},
+    {label: "Gajah", emoji: "🐘", value: 3, color: "#B59CFF"},
   ],
-  outro: "Follow untuk fakta lainnya",
+  statLine: "Koala tidur hampir sepanjang hari",
+  outro: "Follow untuk infografis lainnya",
 };
 
 export const RemotionRoot: React.FC = () => (
@@ -31,10 +24,7 @@ export const RemotionRoot: React.FC = () => (
     width={1080}
     height={1920}
     fps={30}
-    durationInFrames={getTotalFrames(defaultProps)}
+    durationInFrames={getTotalFrames()}
     defaultProps={defaultProps}
-    calculateMetadata={({props}) => ({
-      durationInFrames: getTotalFrames(props),
-    })}
   />
 );
