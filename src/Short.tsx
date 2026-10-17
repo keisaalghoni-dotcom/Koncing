@@ -12,27 +12,56 @@ import {loadFont} from "@remotion/google-fonts/BricolageGrotesque";
 
 const {fontFamily} = loadFont("normal", {weights: ["500", "800"], subsets: ["latin"]});
 
-export type Fact = {emoji: string; title: string; detail: string};
-export type ShortProps = {hook: string; facts: Fact[]; outro: string};
-
-const HOOK = 90;
-const FACT = 105;
-const OUTRO = 80;
-const WIPE = 14;
-
-export const getTotalFrames = (p: ShortProps) => HOOK + p.facts.length * FACT + OUTRO;
-
-const PALETTE = {
-  ink: "#16124A",
-  sun: "#FFD23F",
-  mint: "#2EE6A6",
-  pink: "#FF5C93",
-  paper: "#F7F4FF",
+export type Item = {label: string; emoji: string; value: number; color: string};
+export type ShortProps = {
+  hook: string;
+  unit: string;
+  max: number;
+  items: Item[];
+  statLine: string;
+  outro: string;
 };
-const BGS = [PALETTE.ink, PALETTE.pink, PALETTE.mint, PALETTE.sun, PALETTE.ink];
-const FG = [PALETTE.paper, PALETTE.ink, PALETTE.ink, PALETTE.ink, PALETTE.sun];
 
-// Teks muncul kata per kata dengan efek "pop"
+const HOOK = 75;
+const CHART = 190;
+const STAT = 100;
+const OUTRO = 60;
+
+export const getTotalFrames = () => HOOK + CHART + STAT + OUTRO;
+
+const INK = "#101B3B";
+const SNOW = "#F4F7FF";
+const SUN = "#FFC93C";
+
+// Grid latar yang bergeser pelan
+const Grid: React.FC = () => {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: INK,
+        backgroundImage:
+          "linear-gradient(rgba(255,255,255,0.05) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,0.05) 2px, transparent 2px)",
+        backgroundSize: "90px 90px",
+        backgroundPosition: `0px ${frame * 0.8}px`,
+      }}
+    />
+  );
+};
+
+const FadeIn: React.FC<{children: React.ReactNode}> = ({children}) => {
+  const frame = useCurrentFrame();
+  const o = interpolate(frame, [0, 8], [0, 1], {extrapolateRight: "clamp"});
+  return <AbsoluteFill style={{opacity: o}}>{children}</AbsoluteFill>;
+};
+
+const Center: React.FC<{children: React.ReactNode}> = ({children}) => (
+  <AbsoluteFill style={{justifyContent: "center", alignItems: "center", padding: "0 90px", gap: 54}}>
+    {children}
+  </AbsoluteFill>
+);
+
+// Teks muncul kata per kata
 const Words: React.FC<{text: string; size: number; weight?: number; delay?: number; color: string}> = ({
   text,
   size,
@@ -81,135 +110,164 @@ const Words: React.FC<{text: string; size: number; weight?: number; delay?: numb
   );
 };
 
-// Latar belakang yang "menyapu" naik dari bawah saat scene berganti
-const Scene: React.FC<{bg: string; first?: boolean; children: React.ReactNode}> = ({bg, first, children}) => {
+const fmt = (v: number, shown: number) =>
+  Number.isInteger(v) ? String(Math.round(shown)) : shown.toFixed(1);
+
+// Grafik batang yang tumbuh satu per satu
+const ChartScene: React.FC<{items: Item[]; unit: string; max: number}> = ({items, unit, max}) => {
   const frame = useCurrentFrame();
-  const r = first
-    ? 200
-    : interpolate(frame, [0, WIPE], [0, 200], {
-        easing: Easing.bezier(0.7, 0, 0.2, 1),
-        extrapolateRight: "clamp",
-      });
+  const sorted = [...items].sort((a, b) => b.value - a.value);
   return (
-    <AbsoluteFill style={{background: bg, clipPath: `circle(${r}% at 50% 100%)`}}>
-      {children}
+    <AbsoluteFill style={{justifyContent: "center", padding: "0 80px", gap: 46}}>
+      {sorted.map((it, i) => {
+        const start = 8 + i * 16;
+        const p = interpolate(frame, [start, start + 55], [0, 1], {
+          easing: Easing.out(Easing.cubic),
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+        const w = (it.value / max) * 620 * p;
+        return (
+          <div key={i} style={{display: "flex", flexDirection: "column", gap: 14, fontFamily, color: SNOW}}>
+            <div
+              style={{
+                fontSize: 54,
+                fontWeight: 500,
+                opacity: interpolate(p, [0, 0.2], [0, 1], {extrapolateRight: "clamp"}),
+              }}
+            >
+              {it.emoji} {it.label}
+            </div>
+            <div style={{display: "flex", alignItems: "center", gap: 24}}>
+              <div style={{width: w, height: 84, borderRadius: 42, background: it.color}} />
+              <div style={{fontSize: 64, fontWeight: 800, color: it.color}}>
+                {fmt(it.value, it.value * p)} {unit}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </AbsoluteFill>
   );
 };
 
-// Bentuk dekoratif yang berputar pelan
-const Blob: React.FC<{color: string; top: number; left: number; size: number; speed: number}> = ({
-  color,
+// Angka juara dalam lingkaran progres
+const StatScene: React.FC<{top: Item; max: number; unit: string; statLine: string}> = ({
   top,
-  left,
-  size,
-  speed,
+  max,
+  unit,
+  statLine,
 }) => {
   const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const p = interpolate(frame, [6, 60], [0, 1], {
+    easing: Easing.out(Easing.cubic),
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const R = 330;
+  const C = 2 * Math.PI * R;
+  const pop = spring({frame, fps, config: {damping: 9, stiffness: 120}});
+  return (
+    <AbsoluteFill
+      style={{justifyContent: "center", alignItems: "center", gap: 46, fontFamily, color: SNOW}}
+    >
+      <div style={{fontSize: 110, transform: `scale(${pop})`}}>{top.emoji}</div>
+      <div style={{fontSize: 76, fontWeight: 800}}>{top.label}</div>
+      <div style={{position: "relative", width: 760, height: 760}}>
+        <svg width={760} height={760} viewBox="0 0 760 760" style={{transform: "rotate(-90deg)"}}>
+          <circle cx={380} cy={380} r={R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={44} />
+          <circle
+            cx={380}
+            cy={380}
+            r={R}
+            fill="none"
+            stroke={top.color}
+            strokeWidth={44}
+            strokeLinecap="round"
+            strokeDasharray={C}
+            strokeDashoffset={C * (1 - (top.value / max) * p)}
+          />
+        </svg>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{fontSize: 260, fontWeight: 800, lineHeight: 1, color: top.color}}>
+            {fmt(top.value, top.value * p)}
+          </div>
+          <div style={{fontSize: 64, fontWeight: 500}}>{unit}</div>
+        </div>
+      </div>
+      <div style={{fontSize: 56, fontWeight: 500, textAlign: "center", padding: "0 90px"}}>{statLine}</div>
+    </AbsoluteFill>
+  );
+};
+
+const Pulse: React.FC = () => {
+  const frame = useCurrentFrame();
+  const s = 1 + Math.sin(frame / 5) * 0.12;
   return (
     <div
       style={{
-        position: "absolute",
-        top,
-        left,
-        width: size,
-        height: size,
-        background: color,
-        opacity: 0.18,
-        borderRadius: "38% 62% 55% 45% / 50% 40% 60% 50%",
-        transform: `rotate(${frame * speed}deg)`,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        background: SUN,
+        transform: `scale(${s})`,
       }}
     />
   );
 };
 
-const Center: React.FC<{children: React.ReactNode}> = ({children}) => (
-  <AbsoluteFill
-    style={{justifyContent: "center", alignItems: "center", padding: "0 90px", gap: 54}}
-  >
-    {children}
-  </AbsoluteFill>
-);
-
-const FactScene: React.FC<{fact: Fact; fg: string}> = ({fact, fg}) => {
+export const Short: React.FC<ShortProps> = ({hook, unit, max, items, statLine, outro}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const pop = spring({frame: frame - WIPE, fps, config: {damping: 8, stiffness: 120}});
-  const bob = Math.sin(frame / 8) * 10;
-  return (
-    <Center>
-      <div
-        style={{
-          fontSize: 240,
-          transform: `translateY(${bob}px) scale(${pop}) rotate(${interpolate(pop, [0, 1], [-25, 0])}deg)`,
-        }}
-      >
-        {fact.emoji}
-      </div>
-      <Words text={fact.title} size={120} delay={WIPE + 6} color={fg} />
-      <div style={{opacity: interpolate(frame, [WIPE + 40, WIPE + 55], [0, 1], {extrapolateRight: "clamp", extrapolateLeft: "clamp"})}}>
-        <Words text={fact.detail} size={52} weight={500} delay={WIPE + 42} color={fg} />
-      </div>
-    </Center>
-  );
-};
-
-export const Short: React.FC<ShortProps> = (props) => {
-  const frame = useCurrentFrame();
-  const total = getTotalFrames(props);
-  const {hook, facts, outro} = props;
-
-  // Daftar scene berurutan
-  const scenes: {from: number; dur: number; node: (fg: string) => React.ReactNode}[] = [];
-  let t = 0;
-  scenes.push({
-    from: t,
-    dur: HOOK,
-    node: (fg) => (
-      <Center>
-        <Words text={hook} size={140} delay={4} color={fg} />
-      </Center>
-    ),
-  });
-  t += HOOK;
-  facts.forEach((f) => {
-    scenes.push({from: t, dur: FACT, node: (fg) => <FactScene fact={f} fg={fg} />});
-    t += FACT;
-  });
-  scenes.push({
-    from: t,
-    dur: OUTRO,
-    node: (fg) => (
-      <Center>
-        <Words text={outro} size={120} delay={WIPE} color={fg} />
-      </Center>
-    ),
-  });
+  const total = getTotalFrames();
+  const top = [...items].sort((a, b) => b.value - a.value)[0];
 
   return (
-    <AbsoluteFill style={{background: PALETTE.ink}}>
-      {scenes.map((s, i) => {
-        const isLast = i === scenes.length - 1;
-        const ci = isLast ? BGS.length - 1 : Math.min(i, BGS.length - 2);
-        const bg = BGS[ci];
-        const fg = FG[ci];
-        return (
-          <Sequence
-            key={i}
-            from={s.from}
-            // scene lama tetap tampil sampai sapuan scene baru selesai
-            durationInFrames={s.dur + (isLast ? 0 : WIPE)}
-          >
-            <Scene bg={bg} first={i === 0}>
-              <Blob color={fg} top={-200} left={-220} size={700} speed={0.4} />
-              <Blob color={fg} top={1250} left={600} size={650} speed={-0.3} />
-              {s.node(fg)}
-            </Scene>
-          </Sequence>
-        );
-      })}
+    <AbsoluteFill>
+      <Grid />
 
-      {/* Progress bar ala Shorts */}
+      <Sequence from={0} durationInFrames={HOOK}>
+        <FadeIn>
+          <Center>
+            <Words text={hook} size={140} delay={4} color={SNOW} />
+          </Center>
+        </FadeIn>
+      </Sequence>
+
+      <Sequence from={HOOK} durationInFrames={CHART}>
+        <FadeIn>
+          <ChartScene items={items} unit={unit} max={max} />
+        </FadeIn>
+      </Sequence>
+
+      <Sequence from={HOOK + CHART} durationInFrames={STAT}>
+        <FadeIn>
+          <StatScene top={top} max={max} unit={unit} statLine={statLine} />
+        </FadeIn>
+      </Sequence>
+
+      <Sequence from={HOOK + CHART + STAT} durationInFrames={OUTRO}>
+        <FadeIn>
+          <Center>
+            <Words text={outro} size={110} delay={4} color={SNOW} />
+            <Pulse />
+          </Center>
+        </FadeIn>
+      </Sequence>
+
+      {/* Progress bar */}
       <div
         style={{
           position: "absolute",
@@ -218,7 +276,7 @@ export const Short: React.FC<ShortProps> = (props) => {
           right: 60,
           height: 10,
           borderRadius: 5,
-          background: "rgba(0,0,0,0.18)",
+          background: "rgba(255,255,255,0.15)",
         }}
       >
         <div
@@ -226,11 +284,10 @@ export const Short: React.FC<ShortProps> = (props) => {
             width: `${(frame / total) * 100}%`,
             height: "100%",
             borderRadius: 5,
-            background: PALETTE.paper,
+            background: SUN,
           }}
         />
       </div>
     </AbsoluteFill>
   );
 };
-
